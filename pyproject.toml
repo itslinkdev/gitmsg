@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gitmsg"
+version = "0.1.0"
+description = "Review a proposed commit message for staged changes."
+requires-python = ">=3.11"
+dependencies = ["rich"]
+
+[project.scripts]
+gitmsg = "gitmsg.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
