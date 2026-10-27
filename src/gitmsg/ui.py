@@ -3,7 +3,6 @@
 import os
 import sys
 from collections.abc import Sequence
-from dataclasses import dataclass
 
 from rich import box
 from rich.console import Console
@@ -11,13 +10,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-
-@dataclass
-class StagedFile:
-    status: str
-    path: str
-    added: str
-    removed: str
+from .git import StagedFile
 
 
 def make_console(no_color: bool = False) -> Console:
@@ -32,7 +25,7 @@ def show_review(console: Console, files: Sequence[StagedFile], message: str) -> 
     table.add_column("+", justify="right", style="green", no_wrap=True)
     table.add_column("-", justify="right", style="red", no_wrap=True)
     for file in files:
-        table.add_row(file.status, Text(file.path), file.added, file.removed)
+        table.add_row(file.status, Text(file.label), file.added, file.removed)
     console.print(table)
     console.print(Panel(Text(message), title="Proposed commit message", border_style="cyan"))
 

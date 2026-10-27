@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from gitmsg import cli, ui
+from gitmsg import cli, ui, git as staged_git
 
 
 class NonInteractiveTests(unittest.TestCase):
@@ -49,7 +49,7 @@ class NonInteractiveTests(unittest.TestCase):
         before = self.git("diff", "--cached")
         result = self.run_cli()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout, "chore: update staged files\n")
+        self.assertEqual(result.stdout, "docs: update example.txt\n\n- Add example.txt (+2/-0)\n")
         self.assertEqual(result.stderr, "")
         self.assertEqual(self.git("diff", "--cached"), before)
 
@@ -60,7 +60,7 @@ class NonInteractiveTests(unittest.TestCase):
                 self.environment.update(environment)
                 result = self.run_cli(*arguments)
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(result.stdout, "chore: update staged files\n")
+                self.assertEqual(result.stdout, "docs: update example.txt\n\n- Add example.txt (+2/-0)\n")
                 self.assertEqual(result.stderr, "")
 
     def test_outside_repository_reports_error_only_on_stderr(self):
@@ -85,18 +85,29 @@ class NonInteractiveTests(unittest.TestCase):
         (self.directory / "binary.bin").write_bytes(b"\x00\x01\xff")
         self.git("add", "binary.bin")
         # Git's -z format permits a tab even on hosts that cannot create such a filename.
-        with patch("gitmsg.cli.git", side_effect=[
+        with patch("gitmsg.git.git", side_effect=[
             "true\n", "A\0tab\tname\0", "1\t0\ttab\tname\0"
         ]):
             self.assertEqual(cli.staged_files(), [ui.StagedFile("A", "tab\tname", "1", "0")])
-        original_git = cli.git
-        with patch("gitmsg.cli.git", side_effect=lambda *args: original_git("-C", str(self.directory), *args)):
+        original_git = staged_git.git
+        with patch("gitmsg.git.git", side_effect=lambda *args: original_git("-C", str(self.directory), *args)):
             files = cli.staged_files()
-        self.assertIn(ui.StagedFile("R", "example.txt -> renamed.txt", "0", "0"), files)
+        self.assertIn(ui.StagedFile("R", "renamed.txt", "0", "0", "example.txt"), files)
         self.assertIn(ui.StagedFile("A", "binary.bin", "-", "-"), files)
         result = self.run_cli()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout, "chore: update staged files\n")
+        self.assertTrue(result.stdout.startswith("docs: update documentation\n\n"), result.stdout)
+        self.assertIn("- Rename example.txt -> renamed.txt (+0/-0)", result.stdout)
+        self.assertIn("- Add binary.bin (binary)", result.stdout)
+
+    def test_digest_limit_is_configurable_and_validated(self):
+        self.stage_file()
+        self.assertEqual(self.run_cli("--max-digest-bytes", "32").returncode, 0)
+        for value in ("0", "-1", "not-a-number"):
+            with self.subTest(value=value):
+                result = self.run_cli("--max-digest-bytes", value)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("positive integer", result.stderr)
 
 
 class ReviewTests(unittest.TestCase):
@@ -143,7 +154,7 @@ class ReviewTests(unittest.TestCase):
              patch("gitmsg.ui.make_console", return_value=console), \
              patch("gitmsg.ui.show_review"), \
              patch("gitmsg.ui.read_action", return_value="q"):
-            self.assertEqual(cli.main([]), 0)
+            self.assertEqual(cli.main([], unittest.mock.Mock()), 0)
         console.print.assert_not_called()
 
 
