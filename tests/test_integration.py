@@ -119,7 +119,7 @@ class IntegrationTests(RepoTestCase):
         nested.mkdir()
         os.chdir(nested)
         path = install_hook()
-        self.assertEqual(path, self.directory / "custom hooks/prepare-commit-msg")
+        self.assertTrue(path.samefile(self.directory / "custom hooks/prepare-commit-msg"))
         self.assertTrue(path.is_file())
 
     def test_linked_worktree_installs_in_resolved_git_hooks_directory(self):
@@ -128,7 +128,7 @@ class IntegrationTests(RepoTestCase):
         self.git("worktree", "add", "--detach", "linked", "HEAD")
         os.chdir(self.directory / "linked")
         path = install_hook()
-        self.assertEqual(path, self.directory / ".git/hooks/prepare-commit-msg")
+        self.assertTrue(path.samefile(self.directory / ".git/hooks/prepare-commit-msg"))
 
     def test_real_installed_hook_generates_and_keeps_manual_messages(self):
         self.stage()

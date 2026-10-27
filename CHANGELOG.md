@@ -28,5 +28,10 @@ package version `0.1.0` identifies this early implementation, not a PyPI release
 - Include README, license, authors, and repository links in package metadata.
 - Ignore local environment files and normalize source/documentation line endings.
 
+## Validation fixes
+
+- Compare installed hook files by filesystem identity so Windows temporary-path
+  aliases (such as `RUNNER~1`) and their long names are treated as the same file.
+
 The demo GIF is still a placeholder. HTTP tests are mocked; CI does not verify a
 live provider account, model output quality, or macOS behavior.
