@@ -90,6 +90,14 @@ class ProviderTests(RepoTestCase):
         self.assertEqual(Redactor()("Authorization: Bearer short\nurl=https://user:pass@host\n"),
                          "[REDACTED]\nurl=[REDACTED]host\n")
 
+    def test_private_keys_in_both_sides_of_a_patch_stay_redacted(self):
+        text = (" -----BEGIN PRIVATE KEY-----\n-old-material\n------END PRIVATE KEY-----\n"
+                "+new-material\n+-----END PRIVATE KEY-----\n+visible=1\n")
+        redacted = Redactor()(text)
+        self.assertNotIn("old-material", redacted)
+        self.assertNotIn("new-material", redacted)
+        self.assertIn("visible=1", redacted)
+
     def test_show_payload_is_the_exact_request_body_and_never_sends(self):
         self.write("src/api.py", "print('hello')\n")
         self.write(".gitmsg.toml", '[gitmsg]\nprovider="anthropic"\nmodel="claude-test"\ntimeout=2', stage=False)

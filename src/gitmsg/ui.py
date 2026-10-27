@@ -11,6 +11,7 @@ from rich.table import Table
 from rich.text import Text
 
 from .git import StagedFile
+from .safety import Redactor
 
 
 def make_console(no_color: bool = False) -> Console:
@@ -25,7 +26,7 @@ def show_review(console: Console, files: Sequence[StagedFile], message: str) -> 
     table.add_column("+", justify="right", style="green", no_wrap=True)
     table.add_column("-", justify="right", style="red", no_wrap=True)
     for file in files:
-        table.add_row(file.status, Text(file.label), file.added, file.removed)
+        table.add_row(file.status, Text(Redactor()(file.label)), file.added, file.removed)
     console.print(table)
     console.print(Panel(Text(message), title="Proposed commit message", border_style="cyan"))
 

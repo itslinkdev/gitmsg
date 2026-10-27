@@ -154,7 +154,7 @@ class ReviewTests(unittest.TestCase):
              patch("gitmsg.ui.make_console", return_value=console), \
              patch("gitmsg.ui.show_review"), \
              patch("gitmsg.ui.read_action", return_value="q"):
-            self.assertEqual(cli.main([], unittest.mock.Mock()), 0)
+            self.assertEqual(cli.main([], unittest.mock.Mock(generate=unittest.mock.Mock(return_value="feat: sample"))), 0)
         console.print.assert_not_called()
 
 

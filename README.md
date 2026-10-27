@@ -27,10 +27,41 @@ Press one key, without Enter:
 - `r`: regenerate the proposal.
 - `q`: quit without selecting a message.
 
-Accepting does not create a Git commit or change the index. Editing supports a
+Accepting plain `gitmsg` does not create a Git commit or change the index. Editing supports a
 single line. Regeneration runs the same deterministic heuristic; unchanged
-staged input produces the same proposal. The `Generator` protocol in `cli.py`
-is defined in `providers.py` and remains the boundary for another generator.
+staged input produces the same proposal. The `Generator` protocol in
+`providers.py` remains the boundary for another generator.
+
+## Commit and hook integration
+
+```powershell
+gitmsg commit                 # Review, edit/regenerate, then accept to commit
+gitmsg commit --dry-run       # Preview; never create a commit
+gitmsg commit --yes           # Explicitly accept the proposal, useful in scripts
+gitmsg install-hook --dry-run # Preview the hook location
+gitmsg install-hook           # Install prepare-commit-msg; refuse any existing hook
+```
+
+`commit` writes the accepted message to a temporary UTF-8 file and runs
+`git commit -F <file>`; the file is removed even on failure. Quit or interrupted
+review leaves the index and history alone. Normal Git hooks still run. The
+command does not stage, push, change identity or disable signing. A piped or
+non-interactive commit requires `--yes`; `--dry-run` prints the proposal without
+requiring acceptance. Dry runs can contact the configured LLM; use
+`--show-payload` to inspect the body without any HTTP.
+
+The installed hook fills an empty/comment-only message for an ordinary
+`git commit`, then lets Git open your editor. It skips `-m`, `-F`, amend, merge,
+squash and template messages, and preserves existing text. The hook uses the
+configured provider, the same privacy filters, and a 16 KiB digest. Generation
+errors leave the message unchanged with a notice, so Git can open your editor.
+
+Installation respects `core.hooksPath` (which may be shared with other repos)
+and linked worktrees. It creates an executable hook exclusively; even an empty
+existing hook is never replaced. It uses Git's shell and the absolute Python
+interpreter used at installation. Keep that environment installed; reinstall
+the hook manually if you move/delete it. Remove only the generated hook to
+uninstall. Hook behavior follows [Git's hook documentation](https://git-scm.com/docs/githooks).
 
 ## Offline generator
 

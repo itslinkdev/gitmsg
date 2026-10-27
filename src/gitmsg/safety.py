@@ -23,7 +23,7 @@ TOKEN = re.compile(
 
 class Redactor:
     def __init__(self):
-        self.private_key = False
+        self.private_key = {"old": False, "new": False}
 
     def __call__(self, text: str) -> str:
         lines = []
@@ -33,8 +33,11 @@ class Redactor:
                 line = line.replace(key, "[REDACTED]")
             begin = "-----BEGIN " in line and "PRIVATE KEY-----" in line
             end = "-----END " in line and "PRIVATE KEY-----" in line
-            if self.private_key or begin or end or ASSIGNMENT.search(line):
-                self.private_key = (self.private_key or begin) and not end
+            sides = ("old",) if line.startswith("-") else ("new",) if line.startswith("+") else ("old", "new")
+            private = any(self.private_key[side] for side in sides)
+            for side in sides:
+                self.private_key[side] = (self.private_key[side] or begin) and not end
+            if private or begin or end or ASSIGNMENT.search(line):
                 prefix = line[:1] if line[:1] in ("+", "-", " ") else ""
                 lines.append(prefix + "[REDACTED]\n")
             else:
