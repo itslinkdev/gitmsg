@@ -194,7 +194,9 @@ API format: [Anthropic Messages documentation](https://platform.claude.com/docs/
 
 ## Demo
 
-TODO: add `docs/demo.gif` showing staged review and payload inspection.
+**Demo GIF placeholder:** TODO: add `docs/demo.gif` showing staged review,
+payload inspection and `gitmsg commit --dry-run`.
+<!-- TODO: replace the placeholder above with ![gitmsg demo](docs/demo.gif) -->
 
 ## Build and test
 
@@ -209,6 +211,16 @@ controls, staged metadata, and the interactive review actions. Generator tests
 cover docs-only, tests-only, new feature, rename, delete, lockfile-only, huge diff,
 and binary-file scenarios, plus fix/refactor/build/CI inference, byte limits,
 hunk priority, significant-file selection, literal paths, and staged-only reads.
+Provider tests use mocked HTTP only, never real credentials or paid API calls;
+they cover exact payload bytes, ignore rules, redaction before truncation,
+timeouts/retry/fallback, invalid responses and redirects. Integration tests use
+temporary real Git repositories to cover accepted edits, commit failures,
+dry-run, hook execution, existing hooks, custom hooks paths and linked worktrees.
+
+[GitHub Actions CI](.github/workflows/ci.yml) builds the wheel and runs the suite
+on Ubuntu and Windows with Python 3.11 and 3.13 for pushes and pull requests.
+The workflow needs no API secrets. Configuration follows the
+[GitHub Python workflow guide](https://docs.github.com/en/actions/tutorials/build-and-test-code/python).
 
 ## Authors
 
