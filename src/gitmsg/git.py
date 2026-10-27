@@ -2,7 +2,7 @@
 
 import subprocess
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 
 
@@ -80,7 +80,20 @@ def staged_files() -> list[StagedFile]:
     return files
 
 
-def patch_hunks(file: StagedFile, max_bytes: int) -> Iterator[str]:
+def patch_lines(stream, sanitize: Callable[[str], str] | None) -> Iterator[bytes]:
+    skipping = False
+    while chunk := stream.readline(4096):
+        if sanitize is None:
+            yield chunk
+        elif not skipping:
+            cleaned = sanitize(chunk.decode("utf-8", errors="replace"))
+            # A split line may hide a secret past the chunk boundary: omit it entirely.
+            yield (cleaned if chunk.endswith(b"\n") or len(chunk) < 4096
+                   else " [REDACTED LONG LINE]\n").encode("utf-8")
+        skipping = sanitize is not None and not chunk.endswith(b"\n") and len(chunk) == 4096
+
+
+def patch_hunks(file: StagedFile, max_bytes: int, sanitize: Callable[[str], str] | None = None) -> Iterator[str]:
     paths = [f":(top,literal){path}" for path in (file.path, file.old_path) if path]
     command = ["git", *DIFF_OPTIONS, "--no-color", "--unified=3", "--", *paths]
     # Stream even a huge single line; stderr goes to disk to avoid pipe deadlocks.
@@ -95,7 +108,7 @@ def patch_hunks(file: StagedFile, max_bytes: int) -> Iterator[str]:
                 truncated = False
                 in_hunk = False
                 line_start = True
-                while chunk := process.stdout.readline(4096):
+                for chunk in patch_lines(process.stdout, sanitize):
                     if line_start and chunk.startswith(b"@@ "):
                         if in_hunk:
                             yield hunk.decode("utf-8", errors="ignore") + ("\n[truncated]\n" if truncated else "")

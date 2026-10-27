@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from pathlib import PurePosixPath
 
 from .git import StagedFile, patch_hunks
+from .safety import Redactor
 
 
 DEFAULT_MAX_DIGEST_BYTES = 16_384
@@ -94,18 +95,20 @@ def hunk_priority(hunk: str) -> int:
     return int(any(DECLARATION.search(line) for line in added.splitlines()))
 
 
-def build_digest(files: Sequence[StagedFile], max_bytes: int = DEFAULT_MAX_DIGEST_BYTES) -> str:
+def build_digest(files: Sequence[StagedFile], max_bytes: int = DEFAULT_MAX_DIGEST_BYTES, *, safe: bool = False) -> str:
     """Keep higher-priority files/hunks first and cap the UTF-8 result size."""
     if max_bytes <= 0:
         raise ValueError("max_bytes must be positive")
     candidates = []
     order = 0
     for file in sorted(files, key=significance, reverse=True):
-        if skipped(file):
+        if skipped(file) or (safe and file.old_path and skipped(StagedFile(file.status, file.old_path, file.added, file.removed))):
             continue
         header = f"# {readable(file.label)} [{file.status} +{file.added}/-{file.removed}]\n"
+        if safe:
+            header = Redactor()(header)
         # shortcut: keep each hunk's first 2 KiB; use syntax-aware sampling for semantic coverage.
-        for hunk in patch_hunks(file, min(2048, max_bytes)):
+        for hunk in patch_hunks(file, min(2048, max_bytes), Redactor() if safe else None):
             text = clip_bytes(header + hunk, max_bytes)
             rank = (significance(file)[0], hunk_priority(hunk), file.changes, -order)
             candidates.append((rank, text))

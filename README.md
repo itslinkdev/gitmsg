@@ -1,7 +1,8 @@
 # gitmsg
 
-A small Python 3.11+ CLI that proposes Conventional Commit messages offline
-for staged Git changes.
+A small Python 3.11+ CLI that proposes Conventional Commit messages
+for staged Git changes. The default heuristic provider works entirely offline;
+an optional Anthropic provider uses HTTPS through Python's `urllib`.
 Git must be on PATH. The only runtime dependency is `rich`.
 
 ## Install and run
@@ -29,7 +30,7 @@ Press one key, without Enter:
 Accepting does not create a Git commit or change the index. Editing supports a
 single line. Regeneration runs the same deterministic heuristic; unchanged
 staged input produces the same proposal. The `Generator` protocol in `cli.py`
-remains the boundary for another generator.
+is defined in `providers.py` and remains the boundary for another generator.
 
 ## Offline generator
 
@@ -64,9 +65,9 @@ feat(src): add src/greet.py
 ## Bounded digest
 
 `gitmsg.heuristic.build_digest(files, max_bytes=16384)` builds a staged text
-digest for the heuristic and a future LLM integration. The offline generator
+digest for the heuristic and optional LLM integration. The offline generator
 samples source files for content inference; the digest function can summarize
-all eligible staged files. No LLM is called.
+all eligible staged files.
 Set the limit in UTF-8 **bytes**, including headers and truncation markers:
 
 ```powershell
@@ -100,7 +101,69 @@ only the message plus a newline:
 
 Missing Git, running outside a working tree, and having nothing staged report
 an error on stderr and exit with status 1. Successful selection or quit returns
-0; interrupted input returns 130. No network requests or credentials are used.
+0; interrupted input returns 130. The default provider uses no network or credentials.
+
+## Optional LLM provider
+
+Create `.gitmsg.toml` at the repository root (never put a key in it):
+
+```toml
+[gitmsg]
+provider = "anthropic" # Default: "heuristic"
+model = "claude-sonnet-4-5" # Choose an available model for your account
+timeout = 10 # Seconds per attempt, > 0 and <= 120
+ignore = ["private/*", "internal/**"]
+```
+
+Set `ANTHROPIC_API_KEY` in your environment using your secret manager, then run
+`gitmsg` normally. The key is read only from this variable. A missing key or
+empty eligible digest selects the heuristic with a notice on stderr. Network,
+HTTP and invalid-response failures get one retry, then the same offline fallback.
+Regenerating makes a new request when the LLM is enabled.
+
+## Privacy
+
+`gitmsg --show-payload` prints the exact UTF-8 JSON request body, with no extra
+newline, and exits without HTTP or requiring a key. For the heuristic it prints
+no body and reports that the provider is offline on stderr.
+
+Only the following are sent to `https://api.anthropic.com/v1/messages`:
+
+- The configured model, `max_tokens=512`, a fixed commit-writing system prompt,
+  and one user message containing the bounded, redacted staged digest.
+- That digest contains eligible paths (including rename paths), status and line
+  counts, and sampled staged patch hunks, including removed and context lines.
+  Its limit defaults to 16 KiB before JSON escaping; JSON and the fixed prompt
+  add overhead. No full file, unstaged content, history, remote URL or author
+  identity is included.
+- HTTP headers contain `Content-Type: application/json`, `anthropic-version:
+  2023-06-01` and the API key in `x-api-key`, plus standard urllib transport
+  headers. `--show-payload` previews the body only; credentials are never printed.
+
+The provider uses Git ignore rules, including global ignores and
+`.git/info/exclude`, even for tracked/force-added files (`check-ignore --no-index`).
+It also excludes the digest's generated/binary/lockfile paths, `.gitmsg.toml`,
+`.env`, `.env.*`, `*.env`, private-key filenames and `.pem/.key/.p12/.pfx` files.
+Either excluded side removes a whole rename. Config `ignore` patterns match
+repository-relative POSIX paths using Python `fnmatchcase`: case-sensitive,
+`*` matches slashes, no negation; `private/*` covers all descendants.
+
+Before digest sampling/truncation, secret assignments, authorization/cookie
+lines, PEM private-key blocks, known credential prefixes, long token-like
+strings, URL credentials and the current API key are redacted. Lines longer
+than 4096 bytes are omitted in outbound digests. Redirects are rejected. Provider
+errors are reported without response bodies or exception text; keys are not logged.
+
+Redaction is heuristic: unknown formats and short, unlabeled secrets may escape
+detection. Exclude sensitive paths and inspect `--show-payload` before enabling
+the LLM. Eligible code is sent to Anthropic and is subject to its data policies.
+Local heuristic output and the local review table can still name excluded files.
+
+API format: [Anthropic Messages documentation](https://platform.claude.com/docs/en/api/messages/create).
+
+## Demo
+
+TODO: add `docs/demo.gif` showing staged review and payload inspection.
 
 ## Build and test
 
