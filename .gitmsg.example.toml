@@ -1,0 +1,11 @@
+# Copy to .gitmsg.toml in the repository whose staged changes you will review.
+[gitmsg]
+provider = "heuristic"
+timeout = 10
+ignore = ["private/*", "internal/**"]
+
+# For HTTPS generation, replace provider above with "anthropic", then uncomment
+# model and replace its value with an ID available to your API account.
+# model = "YOUR_MODEL_ID"
+# Read the privacy reference and inspect --show-payload before sending.
+# Load ANTHROPIC_API_KEY through your environment, never through this file.

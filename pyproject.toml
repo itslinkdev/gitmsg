@@ -5,9 +5,17 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "gitmsg"
 version = "0.1.0"
-description = "Review a proposed commit message for staged changes."
+description = "Review staged changes and generate commit messages offline or over HTTPS."
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [{name = "ItsLinkxy (itslinkdev)"}, {name = "Codex"}]
 requires-python = ">=3.11"
 dependencies = ["rich"]
+
+[project.urls]
+Repository = "https://github.com/itslinkdev/gitmsg"
+Issues = "https://github.com/itslinkdev/gitmsg/issues"
+Changelog = "https://github.com/itslinkdev/gitmsg/blob/main/CHANGELOG.md"
 
 [project.scripts]
 gitmsg = "gitmsg.cli:main"

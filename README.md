@@ -1,230 +1,180 @@
 # gitmsg
 
-A small Python 3.11+ CLI that proposes Conventional Commit messages
-for staged Git changes. The default heuristic provider works entirely offline;
-an optional Anthropic provider uses HTTPS through Python's `urllib`.
-Git must be on PATH. The only runtime dependency is `rich`.
+[![CI](https://github.com/itslinkdev/gitmsg/actions/workflows/ci.yml/badge.svg)](https://github.com/itslinkdev/gitmsg/actions/workflows/ci.yml)
 
-## Install and run
+Review your staged changes, get a Conventional Commit message, and decide what
+to commit. Works offline by default, with an optional Anthropic provider.
+
+- **Review first.** Inspect file changes, edit the proposal, regenerate, or quit.
+- **Keep it local.** The heuristic generator needs neither an API key nor a network connection.
+- **Inspect outbound data.** Preview the exact redacted LLM request with `--show-payload`.
+- **Use your Git workflow.** Print a message, commit it, or install a hook for your editor.
+
+Python 3.11+ and Git on `PATH` are required. `rich` is the only runtime dependency;
+HTTPS uses Python's standard-library `urllib`.
+
+## Quick start
+
+Install from this repository in a virtual environment.
+
+### Windows / PowerShell
 
 ```powershell
+git clone https://github.com/itslinkdev/gitmsg.git
+cd gitmsg
 python -m venv .venv
 .\.venv\Scripts\python -m pip install -e .
-.\.venv\Scripts\gitmsg
+.\.venv\Scripts\Activate.ps1
 ```
 
-Run `gitmsg` inside the repository whose staged changes you want to review.
-Stage files with `git add` first.
+If PowerShell blocks activation, use `.\.venv\Scripts\gitmsg.exe` directly.
 
-An interactive terminal shows a compact table with status letters, paths and
-added/removed line counts, then the proposed message in a panel. Renames show
-both paths; binary files show `-` for unknown line counts.
+### Linux / macOS
 
-Press one key, without Enter:
-
-- `a`: accept and print the selected message.
-- `e`: type a replacement message and press Enter; an empty edit keeps it.
-- `r`: regenerate the proposal.
-- `q`: quit without selecting a message.
-
-Accepting plain `gitmsg` does not create a Git commit or change the index. Editing supports a
-single line. Regeneration runs the same deterministic heuristic; unchanged
-staged input produces the same proposal. The `Generator` protocol in
-`providers.py` remains the boundary for another generator.
-
-## Commit and hook integration
-
-```powershell
-gitmsg commit                 # Review, edit/regenerate, then accept to commit
-gitmsg commit --dry-run       # Preview; never create a commit
-gitmsg commit --yes           # Explicitly accept the proposal, useful in scripts
-gitmsg install-hook --dry-run # Preview the hook location
-gitmsg install-hook           # Install prepare-commit-msg; refuse any existing hook
+```sh
+git clone https://github.com/itslinkdev/gitmsg.git
+cd gitmsg
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -e .
 ```
 
-`commit` writes the accepted message to a temporary UTF-8 file and runs
-`git commit -F <file>`; the file is removed even on failure. Quit or interrupted
-review leaves the index and history alone. Normal Git hooks still run. The
-command does not stage, push, change identity or disable signing. A piped or
-non-interactive commit requires `--yes`; `--dry-run` prints the proposal without
-requiring acceptance. Dry runs can contact the configured LLM; use
-`--show-payload` to inspect the body without any HTTP.
+With the environment active, enter any Git working tree and stage your changes:
 
-The installed hook fills an empty/comment-only message for an ordinary
-`git commit`, then lets Git open your editor. It skips `-m`, `-F`, amend, merge,
-squash and template messages, and preserves existing text. The hook uses the
-configured provider, the same privacy filters, and a 16 KiB digest. Generation
-errors leave the message unchanged with a notice, so Git can open your editor.
+```sh
+git add src/greet.py
+gitmsg
+```
 
-Installation respects `core.hooksPath` (which may be shared with other repos)
-and linked worktrees. It creates an executable hook exclusively; even an empty
-existing hook is never replaced. It uses Git's shell and the absolute Python
-interpreter used at installation. Keep that environment installed; reinstall
-the hook manually if you move/delete it. Remove only the generated hook to
-uninstall. Hook behavior follows [Git's hook documentation](https://git-scm.com/docs/githooks).
-
-## Offline generator
-
-The generator parses NUL-separated `git diff --cached --numstat` and
-`--name-status` output, preserving both rename paths, deletions, and binary
-line counts. It reads staged patches, never unstaged file contents.
-
-- Documentation and test paths select `docs` and `test`; build manifests and
-  CI paths select `build` and `ci`.
-- New source files or added declarations select `feat`. Changes with added
-  fix/bug markers, null guards, or exception handling select `fix`.
-- Source renames, deletions, and other implementation edits select `refactor`;
-  remaining changes fall back to `chore`. Source changes take precedence over
-  accompanying docs, tests, build files, and lockfiles. Without source changes,
-  precedence is `ci`, `build`, `test`, `docs`, then `chore`.
-- Scope is the shared top-level directory of all staged paths, including both
-  rename paths. Root files, mixed directories, unsupported scope punctuation,
-  or a scope too long to leave room for an imperative subject omit the scope.
-- Generated subjects start with an imperative verb and contain at most 72
-  characters, including the type and scope. The body has up to five file bullets,
-  ranked by source/test/config/docs priority, then changed-line count. Binary
-  and excluded files remain eligible for the metadata summary.
-
-Example:
+For a new `src/greet.py` containing one line, the offline proposal looks like:
 
 ```text
 feat(src): add src/greet.py
 
-- Add src/greet.py (+2/-0)
+- Add src/greet.py (+1/-0)
 ```
 
-## Bounded digest
+In a terminal, press `a` to accept, `e` to edit a single line, `r` to regenerate,
+or `q` to quit. Accepting plain `gitmsg` prints the message. With unchanged input,
+the offline generator produces the same result on regeneration.
 
-`gitmsg.heuristic.build_digest(files, max_bytes=16384)` builds a staged text
-digest for the heuristic and optional LLM integration. The offline generator
-samples source files for content inference; the digest function can summarize
-all eligible staged files.
-Set the limit in UTF-8 **bytes**, including headers and truncation markers:
+> **Demo GIF placeholder:** a recording of review, payload inspection, and
+> `gitmsg commit --dry-run` will go in `docs/demo.gif`.
+<!-- Replace the placeholder with ![gitmsg demo](docs/demo.gif) when recorded. -->
 
-```powershell
-.\.venv\Scripts\gitmsg --max-digest-bytes 8192
-```
+## Commands
 
-The value must be a positive integer. Binary files, common lockfiles, `.min.*`
-files, source maps, generated filename patterns (such as `.generated.*`, `.g.*`,
-and protobuf outputs), and files inside `dist`, `build`, `generated`, `vendor`,
-`node_modules`, or `__pycache__` directories are excluded from the digest.
+| Command | Result |
+| --- | --- |
+| `gitmsg` or `gitmsg generate` | Review and print a proposed message. |
+| `gitmsg commit` | Review, then run `git commit -F` with the accepted message. |
+| `gitmsg commit --dry-run` | Preview a proposal without creating a commit. |
+| `gitmsg commit --yes` | Accept the proposal without interactive review. |
+| `gitmsg --show-payload` | Print the exact LLM JSON body without sending it. |
+| `gitmsg install-hook --dry-run` | Show the hook location without installing it. |
+| `gitmsg install-hook` | Install `prepare-commit-msg`; refuse an existing hook. |
 
-Patches stream from Git, including very long lines; the full patch is never
-captured in memory. Candidate text is bounded by the digest budget. Source
-hunks outrank tests, configuration, docs, and other text. Within a category,
-fix markers and declarations outrank ordinary hunks, followed by file change
-count and stable input order. Each hunk keeps at most its first 2 KiB before
-the global byte limit is applied. Truncation is marked when space permits.
+Use `--max-digest-bytes 8192` to lower the default 16 KiB digest limit, and
+`--no-color` or `NO_COLOR` to disable ANSI styling. `gitmsg --help` lists all flags.
 
-These are deliberately conservative path/content heuristics, not semantic
-analysis: unusual file layouts or generated files without recognizable names
-may be misclassified. Signals beyond a sampled hunk or the digest limit may be
-missed, and scanning a huge patch still takes time. Review the proposed message.
+Piped/non-interactive `gitmsg` prints only the proposal, plus a newline. A
+non-interactive `commit` requires `--yes`, `--dry-run`, or `--show-payload`.
+Dry runs can still contact the configured LLM; `--show-payload` never does.
 
-Use `gitmsg --no-color` or set `NO_COLOR` (even to an empty value) to disable ANSI
-styling. When stdout or stdin is not a terminal, gitmsg skips all UI and prints
-only the message plus a newline:
+The CLI leaves staging to you and does not push, change your Git identity, or
+disable signing. Accepted commit text is stored in a temporary UTF-8 file, then
+removed even if Git fails. Existing Git hooks still run.
 
-```powershell
-.\.venv\Scripts\gitmsg | Set-Content message.txt
-```
+Exit codes: `0` for success or quit, `1` for repository/configuration/commit
+errors, `2` for invalid arguments, and `130` for interrupted input.
 
-Missing Git, running outside a working tree, and having nothing staged report
-an error on stderr and exit with status 1. Successful selection or quit returns
-0; interrupted input returns 130. The default provider uses no network or credentials.
+## Configuration
 
-## Optional LLM provider
-
-Create `.gitmsg.toml` at the repository root (never put a key in it):
+No config file is needed for offline use. To customize a repository, copy
+[`.gitmsg.example.toml`](.gitmsg.example.toml) to `.gitmsg.toml` at its root.
+The CLI also finds that root config when invoked from a subdirectory.
 
 ```toml
 [gitmsg]
-provider = "anthropic" # Default: "heuristic"
-model = "claude-sonnet-4-5" # Choose an available model for your account
-timeout = 10 # Seconds per attempt, > 0 and <= 120
+provider = "heuristic"
+timeout = 10
 ignore = ["private/*", "internal/**"]
 ```
 
-Set `ANTHROPIC_API_KEY` in your environment using your secret manager, then run
-`gitmsg` normally. The key is read only from this variable. A missing key or
-empty eligible digest selects the heuristic with a notice on stderr. Network,
-HTTP and invalid-response failures get one retry, then the same offline fallback.
-Regenerating makes a new request when the LLM is enabled.
+For LLM generation, change `provider` to `"anthropic"` and set `model` to a model
+ID available to your API account. See Anthropic's [model IDs](https://platform.claude.com/docs/en/models/overview).
+Load `ANTHROPIC_API_KEY` into your environment using your secret manager;
+credentials never belong in this config file.
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `provider` | `"heuristic"` | `heuristic` or `anthropic`. |
+| `model` | unset | Required for Anthropic; passed to its Messages API. |
+| `timeout` | `10` | Socket timeout in seconds per HTTP attempt; greater than 0, at most 120. |
+| `ignore` | `[]` | Extra outbound exclusions using case-sensitive `fnmatchcase` patterns. |
+
+Ignore patterns match repository-relative paths with `/` separators. `*` also
+matches slashes, so `private/*` excludes all descendants. Negation is unsupported.
+These rules control outbound LLM data; excluded paths can still appear in the
+local review table and offline message.
+
+A missing key or empty eligible digest selects the heuristic with a notice on
+stderr. Network, HTTP, and invalid-response failures get one retry, then the
+same fallback. Regenerating with Anthropic enabled makes another request.
 
 ## Privacy
 
-`gitmsg --show-payload` prints the exact UTF-8 JSON request body, with no extra
-newline, and exits without HTTP or requiring a key. For the heuristic it prints
-no body and reports that the provider is offline on stderr.
+The heuristic makes no HTTP requests. Anthropic receives one bounded, redacted
+digest of eligible **staged** patches, plus the configured model, a fixed system
+prompt, and `max_tokens=512`. Paths, status, line counts, removed lines, and
+context can appear in that digest. A small staged file can fit in full.
 
-Only the following are sent to `https://api.anthropic.com/v1/messages`:
+Git ignores and configured exclusions are applied before reading outbound
+patches. `.env` and private-key paths are excluded; likely credentials are
+redacted before sampling and truncation. This is heuristic protection: inspect
+`gitmsg --show-payload` and exclude sensitive paths before enabling the LLM.
+The API key is sent only in the authentication header and is never printed.
 
-- The configured model, `max_tokens=512`, a fixed commit-writing system prompt,
-  and one user message containing the bounded, redacted staged digest.
-- That digest contains eligible paths (including rename paths), status and line
-  counts, and sampled staged patch hunks, including removed and context lines.
-  Its limit defaults to 16 KiB before JSON escaping; JSON and the fixed prompt
-  add overhead. No full file, unstaged content, history, remote URL or author
-  identity is included.
-- HTTP headers contain `Content-Type: application/json`, `anthropic-version:
-  2023-06-01` and the API key in `x-api-key`, plus standard urllib transport
-  headers. `--show-payload` previews the body only; credentials are never printed.
+See [Privacy and data flow](docs/privacy.md) for the exact body, headers,
+exclusion rules, and detection limits.
 
-The provider uses Git ignore rules, including global ignores and
-`.git/info/exclude`, even for tracked/force-added files (`check-ignore --no-index`).
-It also excludes the digest's generated/binary/lockfile paths, `.gitmsg.toml`,
-`.env`, `.env.*`, `*.env`, private-key filenames and `.pem/.key/.p12/.pfx` files.
-Either excluded side removes a whole rename. Config `ignore` patterns match
-repository-relative POSIX paths using Python `fnmatchcase`: case-sensitive,
-`*` matches slashes, no negation; `private/*` covers all descendants.
+## Git hook
 
-Before digest sampling/truncation, secret assignments, authorization/cookie
-lines, PEM private-key blocks, known credential prefixes, long token-like
-strings, URL credentials and the current API key are redacted. Lines longer
-than 4096 bytes are omitted in outbound digests. Redirects are rejected. Provider
-errors are reported without response bodies or exception text; keys are not logged.
+The installed `prepare-commit-msg` hook inserts a proposal into an empty or
+comment-only message for ordinary `git commit`, then Git opens your editor.
+It preserves existing text and skips `-m`, `-F`, amend, merge, squash, and template
+messages. It uses the same provider and privacy rules with a 16 KiB digest.
+Generation errors leave the message alone with a notice.
 
-Redaction is heuristic: unknown formats and short, unlabeled secrets may escape
-detection. Exclude sensitive paths and inspect `--show-payload` before enabling
-the LLM. Eligible code is sent to Anthropic and is subject to its data policies.
-Local heuristic output and the local review table can still name excluded files.
+Installation respects `core.hooksPath` and linked worktrees. Even an empty
+existing hook is never overwritten. The hook invokes the Python interpreter
+used during installation; keep that environment in place. If you move it,
+remove the generated hook and reinstall. To uninstall, remove only the
+`prepare-commit-msg` file created by gitmsg at the reported location. A shared
+`core.hooksPath` affects every repository using that directory.
 
-API format: [Anthropic Messages documentation](https://platform.claude.com/docs/en/api/messages/create).
+## Development
 
-## Demo
+After installing and activating the environment above:
 
-**Demo GIF placeholder:** TODO: add `docs/demo.gif` showing staged review,
-payload inspection and `gitmsg commit --dry-run`.
-<!-- TODO: replace the placeholder above with ![gitmsg demo](docs/demo.gif) -->
-
-## Build and test
-
-```powershell
-.\.venv\Scripts\python -m pip wheel --no-deps --wheel-dir dist .
-.\.venv\Scripts\python -m unittest discover -s tests -v
+```sh
+python -m unittest discover -s tests -v
+python -m pip wheel --no-deps --wheel-dir dist .
+git diff --check
 ```
 
-Packaging uses setuptools as a build tool. Tests use Python's standard library
-and temporary Git repositories; they cover message-only output, errors, color
-controls, staged metadata, and the interactive review actions. Generator tests
-cover docs-only, tests-only, new feature, rename, delete, lockfile-only, huge diff,
-and binary-file scenarios, plus fix/refactor/build/CI inference, byte limits,
-hunk priority, significant-file selection, literal paths, and staged-only reads.
-Provider tests use mocked HTTP only, never real credentials or paid API calls;
-they cover exact payload bytes, ignore rules, redaction before truncation,
-timeouts/retry/fallback, invalid responses and redirects. Integration tests use
-temporary real Git repositories to cover accepted edits, commit failures,
-dry-run, hook execution, existing hooks, custom hooks paths and linked worktrees.
+Tests use temporary Git repositories and mocked HTTP only. CI builds and tests
+on Ubuntu and Windows with Python 3.11 and 3.13. See
+[Contributing](CONTRIBUTING.md) for the code map and development workflow, and
+[Changelog](CHANGELOG.md) for the implementation sequence.
 
-[GitHub Actions CI](.github/workflows/ci.yml) builds the wheel and runs the suite
-on Ubuntu and Windows with Python 3.11 and 3.13 for pushes and pull requests.
-The workflow needs no API secrets. Configuration follows the
-[GitHub Python workflow guide](https://docs.github.com/en/actions/tutorials/build-and-test-code/python).
+The generator uses path/content heuristics and samples at most 2 KiB per hunk;
+it can miss intent in large or unusual changes. LLM proposals also need review.
+Live API behavior and macOS are not exercised by CI.
 
-## Authors
+## Authors and license
 
-- [ItsLinkxy (itslinkdev)](https://github.com/itslinkdev): author and repository owner.
-- Codex: co-author of the implementation.
+[ItsLinkxy (itslinkdev)](https://github.com/itslinkdev) is the repository owner.
+Codex contributed to the implementation and documentation.
 
-Licensed under MIT; see [LICENSE](LICENSE).
+Licensed under [MIT](LICENSE).
